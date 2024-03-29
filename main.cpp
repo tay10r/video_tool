@@ -5,6 +5,7 @@
 #include <uikit/viewport.hpp>
 
 #include <array>
+#include <filesystem>
 #include <iomanip>
 #include <iterator>
 #include <optional>
@@ -39,9 +40,16 @@ public:
   {
     plt.set_app_name("Video Tool");
 
-    m_video_capture.open("%05d.png");
+    for (const auto entry : std::filesystem::directory_iterator(".")) {
+      const auto path = entry.path();
+      const auto ext = path.extension().string();
+      if ((ext != ".jpg") && (ext != ".jpeg") && (ext != ".png") && (ext != ".bmp")) {
+        continue;
+      }
+      m_paths.emplace_back(path.string());
+    }
 
-    m_num_frames = m_video_capture.get(cv::CAP_PROP_FRAME_COUNT);
+    m_num_frames = static_cast<int>(m_paths.size());
 
     glGenTextures(1, &m_current_frame);
 
@@ -182,13 +190,13 @@ protected:
       return;
     }
 
-    if (!m_video_capture.set(cv::CAP_PROP_POS_FRAMES, m_current_frame_index)) {
-      spdlog::error("Failed to seek to frame {}.", m_current_frame_index);
-    }
+    const auto path = m_paths.at(m_current_frame_index);
 
     cv::Mat frame;
 
-    if (!m_video_capture.read(frame)) {
+    frame = cv::imread(path);
+
+    if (frame.empty()) {
       spdlog::error("Failed to read frame {}.", m_current_frame_index);
     }
 
@@ -274,24 +282,24 @@ protected:
 
     const auto t0 = clock_type::now();
 
+    std::filesystem::create_directory("0");
+    std::filesystem::create_directory("1");
+
     while ((m_current_export_frame < static_cast<int>(m_frame_indices.size()))) {
 
       { // export selected sample
 
         std::ostringstream path_stream;
-        path_stream << "1_" << std::setfill('0') << std::setw(8) << m_current_export_frame << ".png";
+        path_stream << "1/" << std::setfill('0') << std::setw(8) << m_current_export_frame << ".png";
         const auto path = path_stream.str();
 
         const auto index = *std::next(m_frame_indices.begin(), m_current_export_frame);
 
-        if (!m_video_capture.set(cv::CAP_PROP_POS_FRAMES, index)) {
+        const auto in_path = m_paths.at(index);
+
+        auto frame = cv::imread(in_path);
+        if (frame.empty()) {
           spdlog::error("Failed to seek to frame {}.", index);
-        }
-
-        cv::Mat frame;
-
-        if (!m_video_capture.read(frame)) {
-          spdlog::error("Failed to read frame {}.", index);
         }
 
         cv::Mat resized_frame;
@@ -304,22 +312,14 @@ protected:
       if (m_export_unselected) {
 
         std::ostringstream path_stream;
-        path_stream << "0_" << std::setfill('0') << std::setw(8) << m_current_export_frame << ".png";
+        path_stream << "0/" << std::setfill('0') << std::setw(8) << m_current_export_frame << ".png";
         const auto path = path_stream.str();
 
         const auto index = m_unselected_indices.at(m_current_export_frame);
 
-        m_video_capture.set(cv::CAP_PROP_POS_FRAMES, index);
+        const auto in_path = m_paths.at(index);
 
-        cv::Mat frame;
-
-        if (!m_video_capture.set(cv::CAP_PROP_POS_FRAMES, index)) {
-          spdlog::error("Failed to seek to frame {}.", index);
-        }
-
-        if (!m_video_capture.read(frame)) {
-          spdlog::error("Failed to read frame {}.", index);
-        }
+        auto frame = cv::imread(in_path);
 
         cv::Mat resized_frame;
 
@@ -356,7 +356,7 @@ protected:
   }
 
 private:
-  cv::VideoCapture m_video_capture;
+  std::vector<std::string> m_paths;
 
   bool m_crop{ false };
 
