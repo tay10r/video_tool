@@ -4,6 +4,7 @@
 #include <uikit/main.hpp>
 #include <uikit/viewport.hpp>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <iomanip>
@@ -48,6 +49,8 @@ public:
       }
       m_paths.emplace_back(path.string());
     }
+
+    std::sort(m_paths.begin(), m_paths.end());
 
     m_num_frames = static_cast<int>(m_paths.size());
 
